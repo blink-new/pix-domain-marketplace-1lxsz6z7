@@ -7,7 +7,7 @@ import { Label } from './ui/label'
 import { Plus, Mail, Settings, LogOut, Crown } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
-import toast from 'react-hot-toast'
+import { useToast } from '../hooks/use-toast'
 
 interface PixKey {
   id: string
@@ -26,6 +26,7 @@ interface Order {
 
 export const Dashboard: React.FC = () => {
   const { user, signOut } = useAuth()
+  const { toast } = useToast()
   const [pixKeys, setPixKeys] = useState<PixKey[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,9 +34,14 @@ export const Dashboard: React.FC = () => {
   const [creatingKey, setCreatingKey] = useState(false)
 
   const fetchUserData = useCallback(async () => {
-    if (!user) return
+    if (!user?.id) {
+      setLoading(false)
+      return
+    }
 
     try {
+      console.log('Fetching data for user:', user.id)
+      
       // Fetch Pix keys
       const { data: keys, error: keysError } = await supabase
         .from('pix_keys')
@@ -43,7 +49,11 @@ export const Dashboard: React.FC = () => {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (keysError) throw keysError
+      if (keysError) {
+        console.error('Keys error:', keysError)
+        throw keysError
+      }
+      console.log('Fetched keys:', keys)
       setPixKeys(keys || [])
 
       // Fetch orders
@@ -53,19 +63,32 @@ export const Dashboard: React.FC = () => {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (ordersError) throw ordersError
+      if (ordersError) {
+        console.error('Orders error:', ordersError)
+        throw ordersError
+      }
+      console.log('Fetched orders:', userOrders)
       setOrders(userOrders || [])
     } catch (error) {
       console.error('Error fetching user data:', error)
-      toast.error('Erro ao carregar dados')
+      toast({
+        title: "Erro",
+        description: `Erro ao carregar dados: ${error.message || 'Erro desconhecido'}`,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, toast])
 
   useEffect(() => {
-    if (user) {
+    console.log('Dashboard useEffect - user:', user)
+    if (user?.id) {
+      console.log('User authenticated, fetching data...')
       fetchUserData()
+    } else if (user === null) {
+      console.log('User is null, stopping loading')
+      setLoading(false)
     }
   }, [user, fetchUserData])
 
@@ -76,7 +99,11 @@ export const Dashboard: React.FC = () => {
     // Validate email format
     const emailRegex = /^[^\s@]+$/
     if (!emailRegex.test(newKeyEmail)) {
-      toast.error('Use apenas a parte antes do @ (ex: joao.silva)')
+      toast({
+        title: "Erro",
+        description: "Use apenas a parte antes do @ (ex: joao.silva)",
+        variant: "destructive",
+      })
       return
     }
 
@@ -96,13 +123,24 @@ export const Dashboard: React.FC = () => {
 
       setPixKeys(prev => [data, ...prev])
       setNewKeyEmail('')
-      toast.success('Chave Pix criada com sucesso!')
+      toast({
+        title: "Sucesso!",
+        description: "Chave Pix criada com sucesso!",
+      })
     } catch (error: any) {
       console.error('Error creating Pix key:', error)
       if (error.code === '23505') {
-        toast.error('Esta chave já existe. Escolha outro nome.')
+        toast({
+          title: "Erro",
+          description: "Esta chave já existe. Escolha outro nome.",
+          variant: "destructive",
+        })
       } else {
-        toast.error('Erro ao criar chave Pix')
+        toast({
+          title: "Erro",
+          description: "Erro ao criar chave Pix",
+          variant: "destructive",
+        })
       }
     } finally {
       setCreatingKey(false)
